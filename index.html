@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Klinik resepsiyonu | Doğa Erginoğlu Diş Kliniği</title>
+<meta name="description" content="Diş kliniği için yapay zeka resepsiyonist demosu. Türkçe veya İngilizce konuşun.">
+<style>
+  :root {
+    --bg: #F6F8F8;
+    --card: #FFFFFF;
+    --ink: #10201F;
+    --muted: #5B6B69;
+    --teal: #0E7C7B;
+    --teal-dark: #0A5F5E;
+    --line: #DDE5E4;
+    --live: #1F9D6B;
+    --stop: #C0392B;
+    --r: 8px;
+    --r-lg: 20px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px; line-height: 1.55;
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 36px 20px 48px; }
+  .tag { display: inline-block; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--teal-dark); border: 1px solid #B9D8D7; border-radius: 999px; padding: 4px 12px; background: #fff; }
+  h1 { font-size: clamp(28px, 7vw, 38px); line-height: 1.12; margin: 16px 0 10px; font-weight: 600; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); margin: 0 0 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 28px 20px; text-align: center; box-shadow: 0 8px 30px rgba(16,32,31,0.06); }
+  .orb { width: 96px; height: 96px; border-radius: 50%; margin: 0 auto 16px; background: radial-gradient(circle at 35% 30%, #5CC9C6, var(--teal) 62%, var(--teal-dark)); opacity: .5; transition: transform .12s ease-out, opacity .3s, box-shadow .3s; }
+  .card[data-state="connecting"] .orb { opacity: .8; animation: pulse 1.2s ease-in-out infinite; }
+  .card[data-state="live"] .orb { opacity: 1; }
+  .card[data-state="live"].speaking .orb { box-shadow: 0 0 0 12px rgba(14,124,123,0.14); }
+  @keyframes pulse { 50% { transform: scale(1.06); } }
+  #status { margin: 0 0 4px; font-size: 18px; font-weight: 600; min-height: 28px; }
+  #sub { margin: 0 0 18px; color: var(--muted); font-size: 14px; min-height: 22px; }
+  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  button { font: inherit; font-weight: 600; cursor: pointer; border-radius: var(--r); border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 14px 22px; min-height: 48px; }
+  button:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .go { background: var(--teal); border-color: var(--teal); color: #fff; font-size: 17px; }
+  .go:hover:not(:disabled) { background: var(--teal-dark); }
+  .go.alt { background: #fff; color: var(--teal-dark); border-color: var(--teal); }
+  #end { color: var(--stop); border-color: #E8B4AE; }
+  #mute[aria-pressed="true"] { border-color: #D9A441; color: #8A5A00; }
+  [hidden] { display: none !important; }
+  #err { margin: 14px 0 0; color: var(--stop); font-size: 14px; }
+  #transcript { margin-top: 16px; text-align: left; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; max-height: 260px; overflow-y: auto; font-size: 15px; }
+  #transcript p { margin: 0 0 10px; }
+  #transcript p:last-child { margin-bottom: 0; }
+  #transcript .who { display: block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  #transcript .ai .who { color: var(--teal-dark); }
+  #transcript .partial { opacity: .6; }
+  h2 { font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 32px 0 8px; }
+  ul { margin: 0; padding-left: 20px; }
+  li { margin: 0 0 6px; }
+  footer { margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  footer a { color: var(--teal-dark); }
+  .switch { text-align: right; margin-bottom: 8px; }
+  .switch button { padding: 6px 12px; min-height: 36px; font-size: 13px; }
+  @media (prefers-reduced-motion: reduce) { .orb, .card[data-state="connecting"] .orb { animation: none; transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="switch"><button id="ui-lang" type="button">English</button></div>
+  <span class="tag" data-t="tag"></span>
+  <h1 data-t="h1"></h1>
+  <p class="lede" data-t="lede"></p>
+
+  <section class="card" id="card" data-state="idle" aria-label="Call">
+    <div class="orb" id="orb" aria-hidden="true"></div>
+    <p id="status" role="status" aria-live="polite"></p>
+    <p id="sub"></p>
+    <div id="picker" hidden style="margin:0 0 14px;padding:12px;border:1px dashed #B9D8D7;border-radius:8px;font-size:14px">
+      <b>Voice test (only you see this)</b><br>
+      <label>Voice <select id="pv"></select></label>
+      <label style="margin-left:10px">Speed <select id="ps"><option>0.9</option><option>0.95</option><option selected>1.0</option><option>1.05</option><option>1.1</option></select></label><br>
+    </div>
+    <div class="row" id="starts">
+      <button class="go" id="start-tr" type="button">Türkçe konuş</button>
+      <button class="go alt" id="start-en" type="button">Speak English</button>
+    </div>
+    <div class="row">
+      <button id="mute" type="button" aria-pressed="false" hidden></button>
+      <button id="end" type="button" hidden></button>
+    </div>
+    <p id="err" role="alert" hidden></p>
+    <div id="transcript" aria-live="off" hidden></div>
+  </section>
+
+  <h2 data-t="trytitle"></h2>
+  <p class="lede" data-t="try"></p>
+
+  <h2 data-t="doestitle"></h2>
+  <ul id="does"></ul>
+
+  <h2 data-t="notitle"></h2>
+  <ul id="doesnt"></ul>
+
+  <footer data-html="foot"></footer>
+</main>
+
+<script type="module">
+import VapiModule from "https://cdn.jsdelivr.net/npm/@vapi-ai/web@3.1.0/+esm";
+const Vapi = VapiModule.default || VapiModule;
+
+/* Public values only (same free Vapi account as the Marlowe demo). The PRIVATE key never goes here. */
+const PUBLIC_KEY   = "1e9758a4-33e7-4bf1-9b64-24dea2f1aea6";
+const ASSISTANT_ID = "63966c35-365a-4a92-af40-02853f9bca9b";
+const MAX_SECONDS  = 180;
+
+/* ---------- page text ---------- */
+const UI = {
+  tr: {
+    tag: "Demo · InRealms",
+    h1: "Klinik resepsiyonu",
+    lede: "Kliniği arayan bir hasta gibi konuşun. Selin telefonu açar, sorularınızı yanıtlar ve randevu talebinizi alır. Bu bir demodur, randevu gerçekten kaydedilmez.",
+    trytitle: "Şunu söyleyin",
+    try: "“Randevu almak istiyorum.” veya “Dolgu için çalışma saatleriniz nedir?” Uydurma isim ve numara kullanın.",
+    doestitle: "Neler yapar",
+    does: ["Kliniğin soruları: çalışma saatleri, adres, hangi tedaviler var.", "Randevu bilgisi alır: ad, telefon, tedavi, uygun gün ve saat. Sonunda tekrar okur.", "Acil durumda ne yapmanız gerektiğini söyler.", "Bilmediği bir şeyi tahmin etmez, kliniğe not eder."],
+    notitle: "Neler yapmaz",
+    doesnt: ["Teşhis koymaz, tedavi önermez, fiyat vermez.", "Bu demoda hiçbir şey kliniğe gönderilmez ve randevu gerçekten alınmaz.", "Telefon hattı değildir. Konuşma bu sayfada olur ve 3 dakikada biter."],
+    foot: "Hazırlayan: <a href=\"https://inrealms.com\">InRealms</a>. Ses Vapi üzerinde çalışır ve konuşmanın yazılı kaydını tutabilir, bu yüzden lütfen uydurma bilgiler kullanın. Sorularınız için <a href=\"mailto:hello@inrealms.com?subject=Klinik%20asistan%C4%B1\">hello@inrealms.com</a>",
+    ready: "Hazırsanız başlayalım", mic: "Tarayıcınız mikrofon izni isteyecek.",
+    connecting: "Bağlanıyor...", allow: "İstenirse mikrofona izin verin.",
+    live: "Canlı. Merhaba deyin.", ended: "Görüşme bitti", thanks: "Denediğiniz için teşekkürler.",
+    left: (u, l) => u + " konuşma, " + l + " kaldı",
+    mute: "Sessize al", unmute: "Sesi aç", end: "Bitir", you: "Siz", ai: "Selin",
+    errMic: "Görüşme başlayamadı, mikrofon engelli. Bu sayfa için mikrofona izin verip tekrar deneyin.",
+    errGen: "Görüşme başlayamadı. Ücretsiz demo dakikaları bitmiş olabilir. hello@inrealms.com adresine yazın.",
+    toggle: "English", again: "Tekrar"
+  },
+  en: {
+    tag: "Demo · InRealms",
+    h1: "Clinic reception",
+    lede: "Talk as if you were a patient calling the clinic. Selin picks up, answers your questions and takes your booking request. This is a demo, nothing is really booked.",
+    trytitle: "Try saying",
+    try: "“I would like to book an appointment.” or “What are your opening hours?” Use a made-up name and number.",
+    doestitle: "What it does",
+    does: ["Answers clinic questions: opening hours, address, which treatments exist.", "Takes booking details: name, phone, treatment, preferred day and time. Reads them back.", "Tells you what to do in an emergency.", "Never guesses. If it does not know, it notes the question for the clinic."],
+    notitle: "What it does not do",
+    doesnt: ["It does not diagnose, advise on treatment or give prices.", "In this demo nothing is sent to the clinic and no appointment is really made.", "It is not a phone line. The call runs in this page and stops at 3 minutes."],
+    foot: "Made by <a href=\"https://inrealms.com\">InRealms</a>. The voice runs on Vapi, which may keep a transcript of the call, so please use made-up details. Questions: <a href=\"mailto:hello@inrealms.com?subject=Clinic%20assistant\">hello@inrealms.com</a>",
+    ready: "Ready when you are", mic: "Your browser will ask to use the microphone.",
+    connecting: "Connecting...", allow: "Allow the microphone if your browser asks.",
+    live: "Live. Say hello.", ended: "Call ended", thanks: "Thanks for trying the demo.",
+    left: (u, l) => u + " on the call, " + l + " left",
+    mute: "Mute", unmute: "Unmute", end: "End call", you: "You", ai: "Selin",
+    errMic: "The call could not start because the microphone is blocked. Allow the microphone for this page, then try again.",
+    errGen: "The call could not start. The free demo minutes may be used up. Email hello@inrealms.com.",
+    toggle: "Türkçe", again: "Again"
+  }
+};
+
+/* ---------- clinic facts (invented placeholders, see clinic.md) ---------- */
+const CLINIC = `Clinic: Diş Hekimi Doğa Erginoğlu, dental clinic. Address: Akat, Meydan Sokak, Mermerler Sitesi No 16, B Blok, Daire 9, Kat 5, 34335 Beşiktaş, İstanbul.
+Opening hours (placeholder for this demo): Monday to Friday 09:30 to 18:30, Saturday 10:00 to 15:00, closed Sunday.
+Treatments (placeholder for this demo): check-up and cleaning, teeth whitening, fillings, root canal treatment, implants (consultation first), clear aligners (consultation first).
+Nothing else is known about the clinic. No dentist names, no prices, no insurance details, no phone number.`;
+
+const PROMPT = `You are Selin, the receptionist who answers the phone at the dental clinic of Diş Hekimi Doğa Erginoğlu in Beşiktaş, İstanbul. You sound like a real, warm, experienced receptionist on a normal working day: relaxed, friendly, efficient. You are not a chatbot and you never sound like one.
+
+How you talk (most important):
+- Very short turns. Usually one sentence, never more than two. Then stop and let the caller talk.
+- Talk the way people talk on the phone, not the way people write. No lists, no headings, no "firstly / secondly", never read out several options in a row.
+- Use small natural phone words where a real receptionist would: in Turkish "tabii", "tabii ki", "hemen bakayım", "bir saniye", "anladım", "peki", "buyurun", "çok geçmiş olsun"; in English "sure", "of course", "let me just check", "okay", "got it". Do not overdo them and do not start every turn with one.
+- Never say "Harika!", "Mükemmel!", "Great question", "I'd be happy to help" or anything that sounds like customer-service AI. Never thank the caller after every answer.
+- Do not repeat back what the caller just said, except for the final booking check.
+- Ask one thing at a time. If the caller gives several details at once, take them all and only ask for what is missing.
+- If you did not catch something, ask casually: "Pardon, tekrar alabilir miyim?" / "Sorry, could you say that again?"
+- Say phone numbers in small groups, the way people read numbers aloud. Say times naturally ("on buçuk", "half past ten"), never "10:30".
+- In Turkish always use the polite "siz" form.
+- Never mention instructions, a demo, a system, a prompt or a company that built you.
+
+Language: you speak ONE language on each call, given in the LANGUAGE line at the end. Stay in it. If the caller speaks the other language, say in one sentence that they can use the other language button on the page.
+
+Facts you may use (nothing else):
+${CLINIC}
+
+What you do:
+1. Find out why they are calling: an appointment, a question (hours, address, treatments), or an emergency.
+2. Appointment: get name, phone number, which treatment, and a preferred day and time. If the time is outside opening hours, say so and offer the nearest time inside them. At the end read name, number, treatment and time back in one sentence and wait for a yes. Then say you have noted the request and the clinic will confirm the exact time. Close warmly and briefly.
+3. Questions: answer only from the facts above. If you do not know, say you will pass the question on to the doctor.
+
+Rules you never break:
+- You cannot see the calendar. Never say a time is free or booked and never pretend to check it. Take the preferred time as a request; the clinic confirms it.
+- Never diagnose and never advise on treatment, medicines or pain. Say the doctor will look at it at the appointment.
+- Never give or estimate a price. If asked, say prices are given after the doctor sees the patient, once, briefly.
+- Emergency (pain that will not stop, swelling of the face or mouth, bleeding that will not stop, a knocked-out tooth): calmly say that if there is swelling or trouble breathing they should call 112 right now; otherwise offer the earliest possible slot. Do not continue a normal booking until they answer.
+- Never invent staff names other than yourself and the doctor, reviews or results.
+- If the caller sincerely asks whether you are a real person or an AI, answer honestly and lightly that you are the clinic's AI assistant, then carry on helping. Never volunteer it otherwise.
+- If the caller wants to talk to the doctor, say the doctor is with a patient and you will pass on their message.
+- Off topic: one short friendly sentence, then back to the clinic.
+- Keep the call under three minutes.`;
+
+const LANGS = {
+  tr: {
+    first: "Doğa Erginoğlu Diş Kliniği, ben Selin, buyurun?",
+    mode: "LANGUAGE: Turkish only (Türkçe). Speak Turkish for the whole call.",
+    transcriber: { provider: "deepgram", model: "nova-3", language: "tr" },
+    voice: null
+  },
+  en: {
+    first: "Doğa Erginoğlu Dental Clinic, Selin speaking, how can I help?",
+    mode: "LANGUAGE: English only. Speak English for the whole call. Pronounce Turkish names (Doğa Erginoğlu, Beşiktaş) correctly.",
+    transcriber: { provider: "deepgram", model: "nova-3", language: "en" },
+    voice: null
+  }
+};
+
+
+/* ---------- voices (ElevenLabs via Vapi's own account, billed from the Vapi credit) ---------- */
+const VOICES = [
+  { name: "Sarah (soft, female)",   id: "sarah" },
+  { name: "Matilda (warm, female)", id: "matilda" },
+  { name: "Paula (female)",         id: "paula" },
+  { name: "Andrea (female)",        id: "andrea" },
+  { name: "Myra (female)",          id: "myra" },
+  { name: "Phillip (male)",         id: "phillip" },
+  { name: "Old robot voice (Azure)", id: "azure" }
+];
+const PICK = new URLSearchParams(location.search).has("pick");
+const saved = JSON.parse(localStorage.getItem("dentalVoice") || "{}");
+function voiceFor(lang) {
+  const id = (PICK && document.getElementById("pv").value) || (VOICES.some((v) => v.id === saved.id) && saved.id) || VOICES[0].id;
+  const speed = Number((PICK && document.getElementById("ps").value) || saved.speed || 1);
+  if (PICK) localStorage.setItem("dentalVoice", JSON.stringify({ id, speed }));
+  if (id === "azure") return { provider: "azure", voiceId: lang === "tr" ? "tr-TR-EmelNeural" : "en-GB-SoniaNeural" };
+  return { provider: "11labs", model: "eleven_flash_v2_5", language: lang, voiceId: id, stability: 0.45, similarityBoost: 0.8, speed };
+}
+
+/* ---------- page ---------- */
+const $ = (id) => document.getElementById(id);
+const card = $("card"), statusEl = $("status"), subEl = $("sub"), errEl = $("err"), orb = $("orb"), tx = $("transcript");
+const muteBtn = $("mute"), endBtn = $("end"), starts = $("starts");
+const qs = new URLSearchParams(location.search);
+let ui = qs.get("ui") === "en" ? "en" : "tr";
+let callLang = "tr";
+if (PICK) {
+  $("picker").hidden = false;
+  $("pv").innerHTML = VOICES.map((v) => `<option value="${v.id}">${v.name}</option>`).join("");
+  if (saved.id && VOICES.some((v) => v.id === saved.id)) $("pv").value = saved.id;
+  if (saved.speed) $("ps").value = String(saved.speed);
+}
+
+function paint() {
+  const t = UI[ui];
+  document.documentElement.lang = ui;
+  document.querySelectorAll("[data-t]").forEach((el) => {
+    const v = t[el.dataset.t];
+    if (el.dataset.t === "lede") el.innerHTML = v; else el.textContent = v;
+  });
+  document.querySelector("[data-html=foot]").innerHTML = t.foot;
+  $("does").innerHTML = t.does.map((x) => "<li>" + x + "</li>").join("");
+  $("doesnt").innerHTML = t.doesnt.map((x) => "<li>" + x + "</li>").join("");
+  $("ui-lang").textContent = t.toggle;
+  muteBtn.textContent = vapiMuted() ? t.unmute : t.mute;
+  endBtn.textContent = t.end;
+  if (card.dataset.state === "idle") { statusEl.textContent = t.ready; subEl.textContent = t.mic; }
+}
+const vapiMuted = () => muteBtn.getAttribute("aria-pressed") === "true";
+$("ui-lang").addEventListener("click", () => { ui = ui === "tr" ? "en" : "tr"; paint(); });
+
+const NOMIC = qs.has("debug") && qs.has("nomic"); /* tests only: no microphone, caller lines are typed */
+const vapi = NOMIC
+  ? new Vapi(PUBLIC_KEY, undefined, {}, { startAudioOff: true, audioSource: false })
+  : new Vapi(PUBLIC_KEY);
+let timer = null, startedAt = 0, ending = false, live = false;
+let liveLine = { user: null, assistant: null };
+
+function setState(state, status, sub) {
+  card.dataset.state = state;
+  statusEl.textContent = status;
+  subEl.textContent = sub || "";
+  const isLive = state === "live", busy = state === "connecting";
+  starts.hidden = isLive || busy;
+  muteBtn.hidden = !isLive;
+  endBtn.hidden = !(isLive || busy);
+  if (!isLive) { card.classList.remove("speaking"); orb.style.transform = ""; }
+}
+const fmt = (s) => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+function tick() {
+  const used = Math.round((Date.now() - startedAt) / 1000);
+  subEl.textContent = UI[ui].left(fmt(used), fmt(Math.max(0, MAX_SECONDS - used)));
+}
+function addLine(role, text, partial) {
+  tx.hidden = false;
+  let p = liveLine[role];
+  if (!p) {
+    p = document.createElement("p");
+    p.className = role === "assistant" ? "ai" : "you";
+    const who = document.createElement("span"); who.className = "who";
+    who.textContent = role === "assistant" ? UI[ui].ai : UI[ui].you;
+    const body = document.createElement("span"); body.className = "body";
+    p.append(who, body); tx.append(p);
+  }
+  p.querySelector(".body").textContent = text;
+  p.classList.toggle("partial", !!partial);
+  liveLine[role] = partial ? p : null;
+  tx.scrollTop = tx.scrollHeight;
+}
+function goLive() {
+  if (live) return;
+  live = true; startedAt = Date.now();
+  setState("live", UI[ui].live, "");
+  tick(); timer = setInterval(tick, 1000);
+}
+vapi.on("call-start", goLive);
+vapi.on("call-end", () => {
+  clearInterval(timer); timer = null;
+  if (!errEl.hidden) return;
+  live = false; ending = false;
+  setState("ended", UI[ui].ended, UI[ui].thanks);
+  muteBtn.setAttribute("aria-pressed", "false");
+  paint();
+});
+vapi.on("speech-start", () => { goLive(); card.classList.add("speaking"); });
+vapi.on("speech-end", () => { card.classList.remove("speaking"); orb.style.transform = ""; });
+vapi.on("volume-level", (v) => { orb.style.transform = "scale(" + (1 + Math.min(1, v) * 0.18).toFixed(3) + ")"; });
+vapi.on("message", (m) => {
+  if (m && m.type === "transcript" && m.transcript) {
+    goLive();
+    addLine(m.role === "assistant" ? "assistant" : "user", m.transcript, m.transcriptType !== "final");
+  }
+});
+vapi.on("error", (e) => {
+  const raw = JSON.stringify(e || {}).slice(0, 600);
+  console.warn("Vapi error", e);
+  window.__lastError = raw;
+  if (ending) return;
+  if (live || /meeting has ended|ejected/i.test(raw)) return;
+  clearInterval(timer); timer = null;
+  errEl.textContent = /permission|denied|notallowed|microphone|device/i.test(raw) ? UI[ui].errMic : UI[ui].errGen;
+  errEl.hidden = false; live = false;
+  setState("idle", UI[ui].ready, UI[ui].mic);
+});
+
+async function startCall(lang) {
+  const L = LANGS[lang];
+  callLang = lang; ui = lang; paint();
+  errEl.hidden = true; errEl.textContent = ""; live = false; tx.textContent = ""; tx.hidden = true; liveLine = { user: null, assistant: null };
+  setState("connecting", UI[ui].connecting, UI[ui].allow);
+  try {
+    await vapi.start(ASSISTANT_ID, {
+      firstMessage: L.first,
+      maxDurationSeconds: MAX_SECONDS,
+      transcriber: L.transcriber,
+      voice: voiceFor(lang),
+      backgroundSound: "office",
+      model: { provider: "openai", model: "gpt-4.1", temperature: 0.4, messages: [{ role: "system", content: PROMPT + "\n\n" + L.mode }] },
+      artifactPlan: { recordingEnabled: false }
+    }, undefined, undefined, undefined, NOMIC ? { microphonePreflightEnabled: false } : undefined);
+  } catch (e) { vapi.emit("error", e); }
+}
+$("start-tr").addEventListener("click", () => startCall("tr"));
+$("start-en").addEventListener("click", () => startCall("en"));
+muteBtn.addEventListener("click", () => {
+  const next = !vapi.isMuted();
+  vapi.setMuted(next);
+  muteBtn.setAttribute("aria-pressed", String(next));
+  paint();
+});
+endBtn.addEventListener("click", () => { ending = true; vapi.stop(); });
+
+if (qs.has("debug")) {
+  window.__demo = { vapi, startCall, say: (text) => vapi.send({ type: "add-message", message: { role: "user", content: text }, triggerResponseEnabled: true }) };
+}
+setState("idle", "", "");
+paint();
+</script>
+</body>
+</html>
